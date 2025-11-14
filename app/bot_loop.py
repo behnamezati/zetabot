@@ -101,27 +101,32 @@ class BotLoop:
     # (V2.1) - بررسی قانون ۸ ترید در دقیقه
     def _check_antispam_cooldown(self, symbol: str) -> bool:
         """
-        قانون ضد اسپم: چک می کند که آیا تعداد ورودها در 60 ثانیه اخیر مجاز است یا خیر.
+        قانون ضد اسپم: چک می‌کند که آیا تعداد ورودها در 60 ثانیه اخیر مجاز است یا خیر.
         """
         current_time = int(time.time())
-        
-        # حذف زمان های قدیمی تر از 60 ثانیه
+
+        # اگر برای این symbol تا حالا لیستی نداشتیم، بسازیم
+        if symbol not in self.entry_timestamps:
+            self.entry_timestamps[symbol] = []
+
+        # حذف زمان‌های قدیمی‌تر از 60 ثانیه
         valid_times = [t for t in self.entry_timestamps[symbol] if current_time - t < 60]
-        self.entry_timestamps[symbol] = valid_times # به روز رسانی لیست
+        self.entry_timestamps[symbol] = valid_times  # به‌روزرسانی لیست
 
         if len(valid_times) >= MAX_ENTRIES_PER_MINUTE:
             print(f"🚦 محدودیت فرکانس (Anti-Spam) برای {symbol} فعال شد (بیش از {MAX_ENTRIES_PER_MINUTE} ترید در دقیقه).")
             # (فعال کردن Cooldown در state_manager)
             state_manager.activate_cooldown(symbol)
-            return False 
-        
+            return False
+
         return True
 
     def _process_tick(self, symbol: str, price: float, candles: List[list], indicators: dict):
         """ 
         (V2.1) - منطق اصلی معاملات (اکنون با ضد اسپم).
         """
-        if not self.running: return
+        if not self.running:
+            return
 
         # (قفل باید برای هر نماد جداگانه باشد، اما برای سادگی فعلاً سراسری است)
         with self.tick_lock:
@@ -133,24 +138,41 @@ class BotLoop:
                 trading_service.monitor_open_positions(symbol, price)
                 is_position_open = symbol in state_manager.open_positions
 
-            # 2. بررسی سیگنال‌های استراتژی (Trend/Range)
-            signal_action = get_final_signal( price, indicators, candles,)
+            # 2. گرفتن سیگنال از استراتژی
+            signal_action = get_final_signal(
+                price,
+                indicators,
+                candles,
+            )
+
+            print(f"[DEBUG] Strategy returned signal={signal_action} for {symbol} at {price}")
+
             if signal_action == "BUY":
-                
+                print(f"[DEBUG] >>> BUY signal pipeline started for {symbol} at {price}")
+
                 # ۳. بررسی ایمنی (Safe Mode / Cooldown)
                 if not state_manager.check_entry_allowed(symbol):
-                    return # (ورود مجاز نیست)
-                    
+                    print(f"[DEBUG] BLOCKED by state_manager.check_entry_allowed({symbol})")
+                    # ⚠️ موقت برای تست: فعلاً جلوی ورود را نگیریم
+                    # return  # ورود مجاز نیست
+
                 # ۴. (جدید V2.1) - بررسی ضد اسپم (قانون ۸ ترید)
                 if not self._check_antispam_cooldown(symbol):
-                    return # (ورود مجاز نیست)
+                    print(f"[DEBUG] BLOCKED by anti-spam / cooldown for {symbol}")
+                    return  # ورود مجاز نیست
 
                 # ۵. اجرای ورود
                 position = trading_service.process_entry_signal(symbol, price)
-                if position:
-                    # (ثبت زمان ورود برای قانون ضد اسپم)
-                    self.entry_timestamps[symbol].append(int(time.time()))
+                print(f"[DEBUG] process_entry_signal() returned: {position}")
 
+                if not position:
+                    print(f"[DEBUG] NO POSITION OBJECT -> order failed / skipped for {symbol}")
+                    return
+
+                # (ثبت زمان ورود برای قانون ضد اسپم)
+                ts = int(time.time())
+                self.entry_timestamps[symbol].append(ts)
+                print(f"[DEBUG] ENTRY TIMESTAMP logged for {symbol} at {ts}")
 
     # --- مدیریت WebSocket ---
 

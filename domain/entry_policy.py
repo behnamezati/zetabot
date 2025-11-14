@@ -97,36 +97,45 @@ def _evaluate_range_entry(current_price: float, indicators: dict) -> bool:
         return False
 
     return True
-# --- تابع اصلی (فراخوانی شده توسط bot_loop) ---
+
 
 def get_final_signal(
     current_price: float,
     indicators: Dict[str, float],
     candles: Optional[List[dict]] = None,
 ) -> Optional[str]:
+    
+    # --- Debug: وضعیت فعلی اندیکاتورها ---
     atr_pct = indicators.get("ATR_PCT", 0.0)
-
-    # فیلتر اولیه روی ATR (بازار خیلی مرده یا بیش‌ازحد وحشی را رد می‌کنیم)
+    print(f"[DEBUG] Price={current_price:.2f}, "
+          f"ATR_PCT={atr_pct:.2f}, "
+          f"RSI={indicators.get('RSI14')}, "
+          f"EMA8={indicators.get('EMA8')}, "
+          f"EMA21={indicators.get('EMA21')}")
+    
+    # --- فیلتر اولیه ATR ---
     MIN_ATR_PCT = 0.2
     MAX_ATR_PCT = 5.0
     if atr_pct < MIN_ATR_PCT or atr_pct > MAX_ATR_PCT:
+        print("[DEBUG] ATR filter blocked entry")
         return None
 
-    regime = _check_market_regime(atr_pct, indicators, current_price)    
-    # 2. بررسی قوانین Trend/Range
-    entry_ok = False
+    # --- تشخیص Trend / Range ---
+    regime = _check_market_regime(atr_pct, indicators, current_price)
+    print(f"[DEBUG] MarketRegime={regime}")
+
+    # --- منطق ورود بر اساس رژیم ---
     if regime == MarketMode.TREND:
         entry_ok = _evaluate_trend_entry(current_price, indicators)
-    else: # MarketMode.RANGE
+        print(f"[DEBUG] TrendEntryOK={entry_ok}")
+    else:
         entry_ok = _evaluate_range_entry(current_price, indicators)
+        print(f"[DEBUG] RangeEntryOK={entry_ok}")
 
     if not entry_ok:
-        return None # سیگنال اولیه شکست خورد
+        print("[DEBUG] Entry rejected by regime rules")
+        return None
 
-    # 3. (منطق ML حذف شد)
-
-    # 4. (منطق ATR Sizing حذف شد، از 3$ ثابت استفاده می‌شود)
-    # position_size_usdt = INITIAL_POSITION_SIZE_USDT 
-    
-    # 5. صدور سیگنال نهایی
+    # --- سیگنال نهایی ---
+    print("[DEBUG] FINAL_SIGNAL = BUY")
     return "BUY"
