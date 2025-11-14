@@ -134,8 +134,7 @@ class BotLoop:
                 is_position_open = symbol in state_manager.open_positions
 
             # 2. بررسی سیگنال‌های استراتژی (Trend/Range)
-            signal_action = get_final_signal(symbol, price, candles, indicators, is_position_open)
-                
+            signal_action = get_final_signal( price, indicators, candles,)
             if signal_action == "BUY":
                 
                 # ۳. بررسی ایمنی (Safe Mode / Cooldown)
